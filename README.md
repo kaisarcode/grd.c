@@ -1,140 +1,159 @@
 # grd.c - Grid | Region | Divide
 
-`grd.c` is a zero-dependency passive geometric calculus engine for dynamic layouts written in pure C.
+`grd.c` is a zero-dependency passive geometric calculus engine for dynamic
+layouts written in pure C.
 
-It computes proportional bounding boxes for tiling layouts. It handles splitting, weight-based sizing, gap spacing, hit-testing, and drag-resize math — entirely without rendering or event handling.
+It computes proportional bounding boxes for tiling layouts. It handles
+splitting, weight-based sizing, gap spacing, hit-testing, drag-resize math, and
+dynamic restructuring without rendering or event handling.
 
-## Interface
+## Layout
 
-`grd.c` follows the kclibs flat-library pattern:
-
-- `grd.h` — public API
-- `libgrd.c` — implementation
-- `grd.c` — CLI wrapper
-
-The CLI starts from:
-
-```bash
-grd split [options]
+```text
+src/grd.c
+src/libgrd.c
+src/grd.h
+bin/{arch}/{platform}/
 ```
 
-## Split
+`src/grd.c` contains the CLI entry point. `src/libgrd.c` contains the library
+implementation. `src/grd.h` is the public API.
+
+## Build
+
+```bash
+make all
+make x86_64/linux
+make test
+make clean
+```
+
+Each target writes artifacts to `bin/{arch}/{platform}/`:
+
+- `grd`
+- `libgrd.a`
+- `libgrd.so`
+
+Windows targets produce `grd.exe`, `libgrd.a`, `libgrd.dll.a`, and
+`libgrd.dll`.
+
+`make clean` removes only `.build/`; it does not delete `bin/`.
+
+Native optimization is disabled by default. Enable it only for local native
+builds with:
+
+```bash
+cmake -S . -B .build/native -DGRD_NATIVE=ON
+```
+
+## Usage
+
+```bash
+./bin/x86_64/linux/grd split [options]
+```
 
 Compute proportional child bounds for a root box:
 
 ```bash
-grd split -w 1920 -H 1080 -k row -W "1 2 1"
+./bin/x86_64/linux/grd split -w 1920 -H 1080 -k row -W "1 2 1"
 ```
 
-Output: one line per child — `index x y w h`
+Output is one line per child:
 
-```
+```text
 0 0 0 480 1080
 1 480 0 960 1080
 2 1440 0 480 1080
 ```
 
-Column split with gap:
+Options:
 
-```bash
-grd split -w 800 -H 600 -k col -W "1 1 1 1" -g 4
-```
+- `--width`, `-w <n>`: Root width in pixels.
+- `--height`, `-H <n>`: Root height in pixels.
+- `--kind`, `-k <row|col>`: Split direction.
+- `--weights`, `-W <...>`: Space or comma separated weights.
+- `--gap`, `-g <n>`: Gap between children in pixels.
+- `--min`, `-m <n>`: Minimum child size in pixels.
+- `--version`, `-v`: Show version.
+- `--help`, `-h`: Show help.
 
-## Parameters
-
-| Flag | Description | Default |
-| :--- | :--- | :--- |
-| `--width, -w` | Root width in pixels | required |
-| `--height, -H` | Root height in pixels | required |
-| `--kind, -k` | Split direction: `row` or `col` | `row` |
-| `--weights, -W` | Space or comma separated weights (min 2) | required |
-| `--gap, -g` | Gap between children in pixels | `0` |
-| `--min, -m` | Minimum child size in pixels | `1` |
-| `--version, -v` | Show binary version | |
-| `--help, -h` | Show help | |
-
-## Library API
-
-### Types
+## Public API
 
 ```c
-typedef enum { KC_GRD_ROW = 1, KC_GRD_COL = 2 } kc_grd_kind_t;
+typedef enum {
+    KC_GRD_ROW = 1,
+    KC_GRD_COL = 2
+} kc_grd_kind_t;
 ```
 
-### Box lifecycle
+Box lifecycle:
 
 ```c
 kc_grd_box_t *kc_grd_box_new(void);
-void     kc_grd_box_free(kc_grd_box_t *b);
+void kc_grd_box_free(kc_grd_box_t *b);
 ```
 
-`kc_grd_box_new` returns a box with `border=1` and `padding=1`. After `kc_grd_split_add`, the split owns the child and `kc_grd_box_free` must not be called on it directly.
+`kc_grd_box_new()` returns a caller-owned box with `border=1` and `padding=1`.
+After `kc_grd_split_add()` succeeds, ownership of the child transfers to the
+split and the caller must not free the child directly.
 
-### Split setup
+Split setup:
 
 ```c
 kc_grd_split_t *kc_grd_split_set(kc_grd_box_t *b, kc_grd_kind_t kind);
-int        kc_grd_split_add(kc_grd_split_t *s, kc_grd_box_t *child, float weight);
-int        kc_grd_split_weight(kc_grd_split_t *s, int index, float weight);
-void       kc_grd_split_gap(kc_grd_split_t *s, int gap, int min_px);
-kc_grd_box_t   *kc_grd_split_at(const kc_grd_split_t *s, int i);
+int kc_grd_split_add(kc_grd_split_t *s, kc_grd_box_t *child, float weight);
+int kc_grd_split_weight(kc_grd_split_t *s, int index, float weight);
+void kc_grd_split_gap(kc_grd_split_t *s, int gap, int min_px);
+kc_grd_box_t *kc_grd_split_at(const kc_grd_split_t *s, int i);
 ```
 
-### Layout
+Layout:
 
 ```c
 void kc_grd_box_bounds(kc_grd_box_t *b, int x, int y, int w, int h);
 void kc_grd_box_layout(kc_grd_box_t *b);
 ```
 
-Call `kc_grd_box_bounds` to set the root size, then `kc_grd_box_layout` to recursively distribute all children. Read computed positions from `box->x, box->y, box->w, box->h` and inner area from `box->inner_x, box->inner_y, box->inner_w, box->inner_h`.
-
-### Hit-testing and drag-resize
+Hit-testing and drag-resize:
 
 ```c
-int  kc_grd_gap_hit(kc_grd_box_t *b, int x, int y, kc_grd_gap_t *out);
-int  kc_grd_drag_begin(const kc_grd_gap_t *gap, int x, int y);
-int  kc_grd_drag_update(kc_grd_split_t *s, int x, int y);
+int kc_grd_gap_hit(kc_grd_box_t *b, int x, int y, kc_grd_gap_t *out);
+int kc_grd_drag_begin(const kc_grd_gap_t *gap, int x, int y);
+int kc_grd_drag_update(kc_grd_split_t *s, int x, int y);
 void kc_grd_drag_end(kc_grd_split_t *s);
 ```
 
-### Dynamic restructuring
+Dynamic restructuring:
 
 ```c
 int kc_grd_box_close(kc_grd_box_t *b);
 ```
 
-Removes a box from its parent. When one child remains, that sibling is promoted into the parent and the split is dissolved.
+`kc_grd_box_close()` removes a box from its parent. When one child remains, that
+sibling is promoted into the parent and the split is dissolved. The caller must
+not use the removed box after a successful call.
 
 ## Threading
 
-**Single-context**: no internal locking. All operations on the same tree must be serialized by the caller.
+The library has no internal locking and no global mutable state. Operations on
+the same tree must be serialized by the caller. Separate trees may be operated
+on concurrently by caller-created threads.
 
-## Build
+The CLI is a single command process and does not create worker threads.
 
-```bash
-cmake -B build
-cmake --build build
-```
-
-Native optimization (off by default):
+## Validation
 
 ```bash
-cmake -B build -DGRD_NATIVE=ON
-cmake --build build
-```
-
-## Testing
-
-```bash
-./test.sh
+make all
+make test
+kc kcs .
 ```
 
 ---
 
 **Author:** KaisarCode
 
-**Email:** <kaisar@kaisarcode.com>
+**Email:** kaisarcode@gmail.com
 
 **Website:** [https://kaisarcode.com](https://kaisarcode.com)
 

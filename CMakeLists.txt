@@ -3,32 +3,39 @@ project(grd C)
 
 set(CMAKE_C_STANDARD 11)
 
-# Output binary to the root directory
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
-
-# Performance optimizations
-option(GRD_NATIVE "Enable native architecture optimizations" OFF)
+option(GRD_NATIVE "Enable native CPU optimizations" OFF)
 
 if(NOT MSVC)
     add_compile_options(-O3 -fno-finite-math-only)
+    add_definitions(-D_GNU_SOURCE)
     if(GRD_NATIVE)
         add_compile_options(-march=native)
     endif()
-    add_definitions(-D_GNU_SOURCE)
 else()
     add_compile_options(/O2)
 endif()
 
-# Main executable
-add_executable(grd
-    grd.c
-    libgrd.c
-)
+set(GRD_SOURCES src/libgrd.c)
+set(GRD_HEADERS src/grd.h)
 
-# Include directories
-target_include_directories(grd PRIVATE .)
+add_library(grd_shared SHARED ${GRD_SOURCES})
+set_target_properties(grd_shared PROPERTIES OUTPUT_NAME grd PREFIX "lib")
+target_include_directories(grd_shared PRIVATE src)
 
-# System libraries
-if(UNIX)
-    target_link_libraries(grd m)
+add_library(grd_static STATIC ${GRD_SOURCES})
+set_target_properties(grd_static PROPERTIES OUTPUT_NAME grd PREFIX "lib")
+target_include_directories(grd_static PRIVATE src)
+
+add_executable(grd_exe src/grd.c ${GRD_SOURCES})
+set_target_properties(grd_exe PROPERTIES OUTPUT_NAME grd)
+target_include_directories(grd_exe PRIVATE src)
+
+if(UNIX AND NOT ANDROID)
+    target_link_libraries(grd_shared m)
+    target_link_libraries(grd_static m)
+    target_link_libraries(grd_exe m)
+elseif(ANDROID)
+    target_link_libraries(grd_shared m)
+    target_link_libraries(grd_static m)
+    target_link_libraries(grd_exe m)
 endif()
