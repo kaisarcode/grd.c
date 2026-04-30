@@ -153,7 +153,7 @@ kc kcs .
 
 **Author:** KaisarCode
 
-**Email:** kaisarcode@gmail.com
+**Email:** <kaisar@kaisarcode.com>
 
 **Website:** [https://kaisarcode.com](https://kaisarcode.com)
 
