@@ -80,6 +80,7 @@ kc_grd_box_t *kc_grd_box_new(void);
  * Must not be called on a box that is owned by a split.
  * The caller must ensure no concurrent operations on this tree.
  * @param b Box pointer.
+ * @return void
  */
 void kc_grd_box_free(kc_grd_box_t *b);
 
@@ -117,6 +118,7 @@ int kc_grd_split_weight(kc_grd_split_t *s, int index, float weight);
  * @param y Top edge in pixels.
  * @param w Width in pixels.
  * @param h Height in pixels.
+ * @return void
  */
 void kc_grd_box_bounds(kc_grd_box_t *b, int x, int y, int w, int h);
 
@@ -124,6 +126,7 @@ void kc_grd_box_bounds(kc_grd_box_t *b, int x, int y, int w, int h);
  * Recursively recomputes the layout of a box and all its children.
  * Must not be called concurrently with any mutation on the same tree.
  * @param b Box pointer.
+ * @return void
  */
 void kc_grd_box_layout(kc_grd_box_t *b);
 
@@ -132,6 +135,7 @@ void kc_grd_box_layout(kc_grd_box_t *b);
  * @param s Split pointer.
  * @param gap Gap between children in pixels.
  * @param min_px Minimum child size in pixels.
+ * @return void
  */
 void kc_grd_split_gap(kc_grd_split_t *s, int gap, int min_px);
 
@@ -170,6 +174,7 @@ int kc_grd_drag_update(kc_grd_split_t *s, int x, int y);
 /**
  * Ends an active drag-resize operation and resets drag state.
  * @param s Split owning the active drag.
+ * @return void
  */
 void kc_grd_drag_end(kc_grd_split_t *s);
 
