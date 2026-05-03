@@ -82,6 +82,7 @@ kc_grd_box_free(root);
 ## Build
 
 ```bash
+make
 make all
 make x86_64/linux
 make x86_64/windows
