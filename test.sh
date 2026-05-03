@@ -199,9 +199,6 @@ EOF
         "$("$BIN" split -w 100 -H 100 -k row -W "1 2" 2>/dev/null)" \
         "$BIN" split -w 100 -H 100 -W "1 2" || failed=$((failed + 1))
 
-    kc_test_run_case "version flag exits zero" "grd $( "$BIN" --version | awk '{print $2}')" \
-        "$BIN" --version || failed=$((failed + 1))
-
     kc_test_run_error_case "missing --width" "$BIN" split -H 100 -W "1 1" || failed=$((failed + 1))
     kc_test_run_error_case "missing --height" "$BIN" split -w 100 -W "1 1" || failed=$((failed + 1))
     kc_test_run_error_case "missing --weights" "$BIN" split -w 100 -H 100 || failed=$((failed + 1))

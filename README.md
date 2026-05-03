@@ -35,6 +35,7 @@ Split an 800x600 area into four equal columns with a 4px gap:
 | `-g <n>` | Gap between children in pixels (default: 0) |
 | `-m <n>` | Minimum child size in pixels (default: 1) |
 | `-h`, `--help` | Show help and usage |
+| `-v`, `--version` | Show version |
 
 ---
 
