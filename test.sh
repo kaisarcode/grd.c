@@ -211,6 +211,14 @@ EOF
     kc_test_run_error_case "zero width rejected" "$BIN" split -w 0 -H 100 -W "1 1" || failed=$((failed + 1))
     kc_test_run_error_case "zero height rejected" "$BIN" split -w 100 -H 0 -W "1 1" || failed=$((failed + 1))
 
+    expected="$(cat <<'EOF'
+0 0 0 15 50
+1 15 0 85 50
+EOF
+)"
+    kc_test_run_case "min clamps small child" "$expected" \
+        "$BIN" split -w 100 -H 50 -k row -W "1 9" -g 0 -m 15 || failed=$((failed + 1))
+
     if [ "$failed" -eq 0 ]; then
         return 0
     fi
