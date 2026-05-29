@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define KC_GRD_VERSION "1.0.0"
+#define KC_GRD_VERSION "1.1.0"
 #define KC_GRD_WEIGHTS_CAP 256
 
 /**
@@ -210,16 +210,10 @@ static int kc_grd_cmd_split(
  * @return 0 on success, 1 on error.
  */
 int main(int argc, char **argv) {
-    int width = 0;
-    int height = 0;
-    kc_grd_kind_t kind = KC_GRD_ROW;
-    const char *weights_text = NULL;
-    int gap = 0;
-    int min_px = 1;
-    int width_set = 0;
-    int height_set = 0;
     int i;
-
+    kc_grd_options_t opts = kc_grd_options_default();
+    opts.min_px = 1;
+    kc_grd_options_load_env(&opts);
     float weights[KC_GRD_WEIGHTS_CAP];
     int weight_count = 0;
 
@@ -254,66 +248,95 @@ int main(int argc, char **argv) {
         }
 
         if (strcmp(argv[i], "--width") == 0 || strcmp(argv[i], "-w") == 0) {
-            if (i + 1 >= argc || !kc_grd_parse_int(argv[i + 1], &width) || width <= 0)
+            if (i + 1 >= argc || !kc_grd_parse_int(argv[i + 1], &opts.width) || opts.width <= 0) {
+                kc_grd_options_free(&opts);
                 return kc_grd_fail_usage(argv[0], "Invalid value for --width.");
-            width_set = 1;
+            }
             i++;
             continue;
         }
 
         if (strcmp(argv[i], "--height") == 0 || strcmp(argv[i], "-H") == 0) {
-            if (i + 1 >= argc || !kc_grd_parse_int(argv[i + 1], &height) || height <= 0)
+            if (i + 1 >= argc || !kc_grd_parse_int(argv[i + 1], &opts.height) || opts.height <= 0) {
+                kc_grd_options_free(&opts);
                 return kc_grd_fail_usage(argv[0], "Invalid value for --height.");
-            height_set = 1;
+            }
             i++;
             continue;
         }
 
         if (strcmp(argv[i], "--kind") == 0 || strcmp(argv[i], "-k") == 0) {
-            if (i + 1 >= argc)
+            if (i + 1 >= argc) {
+                kc_grd_options_free(&opts);
                 return kc_grd_fail_usage(argv[0], "Missing value for --kind.");
-            if (strcmp(argv[i + 1], "row") == 0) kind = KC_GRD_ROW;
-            else if (strcmp(argv[i + 1], "col") == 0) kind = KC_GRD_COL;
-            else return kc_grd_fail_usage(argv[0], "Invalid value for --kind. Use row or col.");
+            }
+            free(opts.kind);
+            opts.kind = strdup(argv[i + 1]);
             i++;
             continue;
         }
 
         if (strcmp(argv[i], "--weights") == 0 || strcmp(argv[i], "-W") == 0) {
-            if (i + 1 >= argc)
+            if (i + 1 >= argc) {
+                kc_grd_options_free(&opts);
                 return kc_grd_fail_usage(argv[0], "Missing value for --weights.");
-            weights_text = argv[i + 1];
+            }
+            free(opts.weights);
+            opts.weights = strdup(argv[i + 1]);
             i++;
             continue;
         }
 
         if (strcmp(argv[i], "--gap") == 0 || strcmp(argv[i], "-g") == 0) {
-            if (i + 1 >= argc || !kc_grd_parse_int(argv[i + 1], &gap) || gap < 0)
+            if (i + 1 >= argc || !kc_grd_parse_int(argv[i + 1], &opts.gap) || opts.gap < 0) {
+                kc_grd_options_free(&opts);
                 return kc_grd_fail_usage(argv[0], "Invalid value for --gap.");
+            }
             i++;
             continue;
         }
 
         if (strcmp(argv[i], "--min") == 0 || strcmp(argv[i], "-m") == 0) {
-            if (i + 1 >= argc || !kc_grd_parse_int(argv[i + 1], &min_px) || min_px < 0)
+            if (i + 1 >= argc || !kc_grd_parse_int(argv[i + 1], &opts.min_px) || opts.min_px < 0) {
+                kc_grd_options_free(&opts);
                 return kc_grd_fail_usage(argv[0], "Invalid value for --min.");
+            }
             i++;
             continue;
         }
 
+        kc_grd_options_free(&opts);
         return kc_grd_fail_usage(argv[0], "Unknown argument.");
     }
 
-    if (!width_set)
+    if (opts.width <= 0) {
+        kc_grd_options_free(&opts);
         return kc_grd_fail_usage(argv[0], "Missing required --width.");
-    if (!height_set)
+    }
+    if (opts.height <= 0) {
+        kc_grd_options_free(&opts);
         return kc_grd_fail_usage(argv[0], "Missing required --height.");
-    if (!weights_text)
+    }
+    if (!opts.weights) {
+        kc_grd_options_free(&opts);
         return kc_grd_fail_usage(argv[0], "Missing required --weights.");
+    }
 
-    weight_count = kc_grd_parse_weights(weights_text, weights, KC_GRD_WEIGHTS_CAP);
-    if (weight_count < 2)
+    weight_count = kc_grd_parse_weights(opts.weights, weights, KC_GRD_WEIGHTS_CAP);
+    if (weight_count < 2) {
+        kc_grd_options_free(&opts);
         return kc_grd_fail_usage(argv[0], "At least two weights are required.");
+    }
 
-    return kc_grd_cmd_split(width, height, kind, weights, weight_count, gap, min_px);
+    kc_grd_kind_t k = KC_GRD_ROW;
+    if (opts.kind && strcmp(opts.kind, "col") == 0) {
+        k = KC_GRD_COL;
+    } else if (opts.kind && strcmp(opts.kind, "row") != 0) {
+        kc_grd_options_free(&opts);
+        return kc_grd_fail_usage(argv[0], "Invalid value for --kind. Use row or col.");
+    }
+
+    int rc = kc_grd_cmd_split(opts.width, opts.height, k, weights, weight_count, opts.gap, opts.min_px);
+    kc_grd_options_free(&opts);
+    return rc;
 }

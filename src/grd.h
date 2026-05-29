@@ -73,6 +73,27 @@ struct kc_grd_box {
  * via kc_grd_split_add, after which the split owns it.
  * @return Box pointer or NULL on allocation failure.
  */
+typedef struct kc_grd_options {
+    int width;
+    int height;
+    char *kind;
+    char *weights;
+    int gap;
+    int min_px;
+} kc_grd_options_t;
+
+typedef void (*kc_grd_signal_callback_t)(kc_grd_box_t *ctx);
+
+kc_grd_options_t kc_grd_options_default(void);
+void kc_grd_options_load_env(kc_grd_options_t *opts);
+void kc_grd_options_free(kc_grd_options_t *opts);
+
+int kc_grd_on_signal(kc_grd_box_t *ctx, int sig, kc_grd_signal_callback_t cb);
+int kc_grd_raise_signal(kc_grd_box_t *ctx, int sig);
+int kc_grd_listen_signals(kc_grd_box_t *ctx);
+int kc_grd_listen_signal(kc_grd_box_t *ctx, int sig_id);
+void kc_grd_signal_listener(int sig);
+
 kc_grd_box_t *kc_grd_box_new(void);
 
 /**
@@ -97,7 +118,7 @@ kc_grd_split_t *kc_grd_split_set(kc_grd_box_t *b, kc_grd_kind_t kind);
  * Ownership of child transfers to the split on success.
  * @param s Split pointer.
  * @param child Child box to add.
- * @param weight Proportional weight (clamped to 1.0 if <= 0).
+ * @param weight Proportional weight (clamped to 1.0 if at most 0).
  * @return 0 on success, or -1 on failure.
  */
 int kc_grd_split_add(kc_grd_split_t *s, kc_grd_box_t *child, float weight);
@@ -106,7 +127,7 @@ int kc_grd_split_add(kc_grd_split_t *s, kc_grd_box_t *child, float weight);
  * Updates the proportional weight of one child in a split.
  * @param s Split pointer.
  * @param index Child index.
- * @param weight New proportional weight (clamped to 1.0 if <= 0).
+ * @param weight New proportional weight (clamped to 1.0 if at most 0).
  * @return 0 on success, or -1 on invalid input.
  */
 int kc_grd_split_weight(kc_grd_split_t *s, int index, float weight);
