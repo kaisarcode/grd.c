@@ -37,7 +37,7 @@ static void kc_grd_help(const char *name) {
     printf("  --gap,     -g <n>      Gap between children in pixels (default: 0)\n");
     printf("  --min,     -m <n>      Minimum child size in pixels (default: 1)\n");
     printf("  --help,    -h          Show help\n");
-    printf("  --version, -v          Show version\n\n");
+    printf("  -v, --version          Show version\n\n");
     printf("Output:\n");
     printf("  One line per child: index x y w h\n\n");
     printf("Examples:\n");
