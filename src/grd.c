@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define KC_GRD_VERSION "1.1.0"
+#define KC_GRD_VERSION "1.1.1"
 #define KC_GRD_WEIGHTS_CAP 256
 
 /**

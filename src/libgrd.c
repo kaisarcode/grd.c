@@ -692,7 +692,8 @@ int kc_grd_listen_signal(kc_grd_box_t *ctx, int sig_id) {
  * @return None.
  */
 void kc_grd_signal_listener(int sig) {
-    if (g_signal_ctx) {
-        kc_grd_raise_signal(g_signal_ctx, sig);
-    }
+    if (g_signal_ctx && kc_grd_raise_signal(g_signal_ctx, sig) == 0)
+        return;
+    signal(sig, SIG_DFL);
+    raise(sig);
 }

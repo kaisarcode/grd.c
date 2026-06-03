@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v1.1.1
+
+- Fixed `grd_signal_listener` to restore default signal behavior (SIG_DFL)
+  when no `on_signal` handler is registered.
+
 ## v1.1.0
 
 - Added data-driven configuration with table-driven environment variable loading.
