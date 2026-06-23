@@ -18,7 +18,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define KC_GRD_VERSION "1.1.1"
 #define KC_GRD_WEIGHTS_CAP 256
 
 /**
@@ -49,8 +48,8 @@ static void kc_grd_help(const char *name) {
  * Prints the binary version string to stdout.
  * @return void
  */
-static void kc_grd_version(void) {
-    printf("grd %s\n", KC_GRD_VERSION);
+static void kc_grd_cli_version(void) {
+    printf("grd build %llu\n", (unsigned long long)kc_grd_version());
 }
 
 /**
@@ -228,7 +227,7 @@ int main(int argc, char **argv) {
     }
 
     if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0) {
-        kc_grd_version();
+        kc_grd_cli_version();
         return 0;
     }
 
@@ -243,7 +242,7 @@ int main(int argc, char **argv) {
         }
 
         if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
-            kc_grd_version();
+            kc_grd_cli_version();
             return 0;
         }
 

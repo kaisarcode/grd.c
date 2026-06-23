@@ -10,6 +10,8 @@
 #ifndef KC_GRD_H
 #define KC_GRD_H
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -93,6 +95,8 @@ int kc_grd_raise_signal(kc_grd_box_t *ctx, int sig);
 int kc_grd_listen_signals(kc_grd_box_t *ctx);
 int kc_grd_listen_signal(kc_grd_box_t *ctx, int sig_id);
 void kc_grd_signal_listener(int sig);
+
+uint64_t kc_grd_version(void);
 
 kc_grd_box_t *kc_grd_box_new(void);
 

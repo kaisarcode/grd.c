@@ -1,5 +1,5 @@
 #!/bin/bash
-# test.sh
+# Grid split CLI test harness.
 # Summary: Validation suite for grd CLI split behavior.
 # Author:  KaisarCode
 # Website: https://kaisarcode.com

@@ -3,6 +3,10 @@ project(grd C)
 
 set(CMAKE_C_STANDARD 11)
 
+if(NOT DEFINED GRD_BUILD_VERSION)
+    set(GRD_BUILD_VERSION 0)
+endif()
+
 option(GRD_NATIVE "Enable native CPU optimizations" OFF)
 
 if(NOT MSVC)
@@ -17,6 +21,10 @@ endif()
 
 set(GRD_SOURCES src/libgrd.c)
 set(GRD_HEADERS src/grd.h)
+
+set_source_files_properties(src/libgrd.c PROPERTIES
+    COMPILE_DEFINITIONS KC_GRD_BUILD_VERSION=${GRD_BUILD_VERSION}
+)
 
 add_library(grd_shared SHARED ${GRD_SOURCES})
 set_target_properties(grd_shared PROPERTIES OUTPUT_NAME grd PREFIX "lib")

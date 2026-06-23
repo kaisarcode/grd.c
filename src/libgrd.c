@@ -697,3 +697,15 @@ void kc_grd_signal_listener(int sig) {
     signal(sig, SIG_DFL);
     raise(sig);
 }
+
+#ifndef KC_GRD_BUILD_VERSION
+#define KC_GRD_BUILD_VERSION 0
+#endif
+
+/**
+ * Returns the build version generated at compile time.
+ * @return Unix timestamp for the current build.
+ */
+uint64_t kc_grd_version(void) {
+    return (uint64_t)KC_GRD_BUILD_VERSION;
+}
