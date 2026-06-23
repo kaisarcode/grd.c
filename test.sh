@@ -1,6 +1,5 @@
 #!/bin/bash
-# Grid split CLI test harness.
-# Summary: Validation suite for grd CLI split behavior.
+# Summary: Validation suite for grd split behavior.
 # Author:  KaisarCode
 # Website: https://kaisarcode.com
 # License: https://www.gnu.org/licenses/gpl-3.0.html
