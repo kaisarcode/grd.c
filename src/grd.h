@@ -11,6 +11,9 @@
 #define KC_GRD_H
 
 #include <stdint.h>
+#include <signal.h>
+
+#define KC_GRD_ESTOP (-3)
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,6 +21,13 @@ extern "C" {
 
 typedef struct kc_grd_box kc_grd_box_t;
 typedef struct kc_grd_split kc_grd_split_t;
+
+typedef void (*kc_grd_signal_callback_t)(kc_grd_box_t *ctx);
+
+typedef struct {
+    int sig;
+    kc_grd_signal_callback_t cb;
+} kc_grd_signal_entry_t;
 
 typedef enum {
     KC_GRD_ROW = 1,
@@ -67,6 +77,11 @@ struct kc_grd_box {
 
     int border;
     int padding;
+
+    volatile sig_atomic_t stop_requested;
+    kc_grd_signal_entry_t *signal_handlers;
+    int signal_handlers_count;
+    int signal_handlers_capacity;
 };
 
 /**
@@ -84,8 +99,6 @@ typedef struct kc_grd_options {
     int min_px;
 } kc_grd_options_t;
 
-typedef void (*kc_grd_signal_callback_t)(kc_grd_box_t *ctx);
-
 kc_grd_options_t kc_grd_options_default(void);
 void kc_grd_options_load_env(kc_grd_options_t *opts);
 void kc_grd_options_free(kc_grd_options_t *opts);
@@ -95,6 +108,8 @@ int kc_grd_raise_signal(kc_grd_box_t *ctx, int sig);
 int kc_grd_listen_signals(kc_grd_box_t *ctx);
 int kc_grd_listen_signal(kc_grd_box_t *ctx, int sig_id);
 void kc_grd_signal_listener(int sig);
+
+void kc_grd_stop(kc_grd_box_t *ctx);
 
 uint64_t kc_grd_version(void);
 

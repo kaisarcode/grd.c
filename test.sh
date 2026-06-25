@@ -113,13 +113,59 @@ kc_test_run_error_case() {
     return 1
 }
 
+# Tests multi-context stop isolation.
+# @return 0 on success, 1 on failure.
+kc_test_multictx_stop() {
+    LIB_PATH="$ROOT/bin/$(kc_test_arch)/$(kc_test_platform)/libgrd.a"
+
+    {
+        printf '%s\n' '#include "grd.h"'
+        printf '%s\n' '#include <stdio.h>'
+        printf '%s\n' '#include <stdlib.h>'
+        printf '%s\n' 'static int g_fired = 0;'
+        printf '%s\n' 'static void handler(kc_grd_box_t *ctx) { (void)ctx; g_fired++; }'
+        printf '%s\n' 'int main(void) {'
+        printf '%s\n' '    kc_grd_box_t *a = kc_grd_box_new();'
+        printf '%s\n' '    kc_grd_box_t *b = kc_grd_box_new();'
+        printf '%s\n' '    if (!a || !b) return 1;'
+        printf '%s\n' '    kc_grd_stop(a);'
+        printf '%s\n' '    if (!a->stop_requested) return 2;'
+        printf '%s\n' '    if (b->stop_requested) return 3;'
+        printf '%s\n' '    kc_grd_on_signal(a, 42, handler);'
+        printf '%s\n' '    kc_grd_raise_signal(a, 42);'
+        printf '%s\n' '    if (g_fired != 1) return 4;'
+        printf '%s\n' '    kc_grd_raise_signal(b, 42);'
+        printf '%s\n' '    if (g_fired != 1) return 5;'
+        printf '%s\n' '    kc_grd_box_free(a);'
+        printf '%s\n' '    kc_grd_box_free(b);'
+        printf '%s\n' '    return 0;'
+        printf '%s\n' '}'
+    } > "$TMPDIR/multictx.c"
+
+    if ! cc -I "$ROOT/src" "$TMPDIR/multictx.c" "$LIB_PATH" -o "$TMPDIR/multictx"; then
+        kc_test_fail "multi-context compile: expected multictx.c to compile, but compilation failed"
+        return 1
+    fi
+    kc_test_pass "multi-context: test program compiles successfully"
+
+    if ! "$TMPDIR/multictx"; then
+        kc_test_fail "multi-context execution: expected test program to return 0, got non-zero"
+        return 1
+    fi
+    kc_test_pass "multi-context stop: two contexts coexist, stop is isolated"
+    return 0
+}
+
 # Runs the full validation suite for grd split behavior.
 # @return 0 when all tests pass, 1 otherwise.
 kc_test_main() {
     local failed=0
     local expected
 
-    BIN=$(kc_test_binary_path)
+    ROOT=$(CDPATH='' cd -- "$(dirname "$0")" && pwd)
+    BIN="$ROOT/bin/$(kc_test_arch)/$(kc_test_platform)/grd"
+    TMPDIR=$(mktemp -d)
+    trap 'rm -rf "$TMPDIR"' EXIT INT HUP TERM
 
     kc_test_check_binary || exit 1
 
@@ -218,11 +264,9 @@ EOF
     kc_test_run_case "min clamps small child" "$expected" \
         "$BIN" split -w 100 -H 50 -k row -W "1 9" -g 0 -m 15 || failed=$((failed + 1))
 
-    if [ "$failed" -eq 0 ]; then
-        return 0
-    fi
+    kc_test_multictx_stop || failed=$((failed + 1))
 
-    return 1
+    return "$failed"
 }
 
 kc_test_main

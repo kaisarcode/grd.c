@@ -27,6 +27,10 @@ static void *zalloc(size_t n) {
     return p;
 }
 
+static kc_grd_box_t **g_signal_ctx_list = NULL;
+static int g_signal_ctx_cap = 0;
+static int g_signal_ctx_count = 0;
+
 /**
  * Clamps a value to zero if negative.
  * @param v Input value.
@@ -201,8 +205,17 @@ kc_grd_box_t *kc_grd_box_new(void) {
  * @return void
  */
 void kc_grd_box_free(kc_grd_box_t *b) {
+    int i;
     if (!b) return;
     split_free(b->split);
+    free(b->signal_handlers);
+    b->signal_handlers = NULL;
+    for (i = 0; i < g_signal_ctx_count; i++) {
+        if (g_signal_ctx_list[i] == b) {
+            g_signal_ctx_list[i] = g_signal_ctx_list[--g_signal_ctx_count];
+            break;
+        }
+    }
     free(b);
 }
 
@@ -522,16 +535,6 @@ static const kc_env_map_t env_config_table[] = {
 };
 static const int env_config_table_n = sizeof(env_config_table) / sizeof(env_config_table[0]);
 
-typedef struct {
-    int sig;
-    kc_grd_signal_callback_t cb;
-} kc_grd_signal_entry_t;
-
-static kc_grd_box_t *g_signal_ctx = NULL;
-static kc_grd_signal_entry_t *g_signal_handlers = NULL;
-static int g_signal_handlers_count = 0;
-static int g_signal_handlers_capacity = 0;
-
 /**
  * Create an options struct initialized with default values.
  * @param none Unused.
@@ -604,17 +607,17 @@ int kc_grd_on_signal(kc_grd_box_t *ctx, int sig, kc_grd_signal_callback_t cb) {
     int i;
     if (!ctx) return -1;
 
-    for (i = 0; i < g_signal_handlers_count; i++) {
-        if (g_signal_handlers[i].sig == sig) {
+    for (i = 0; i < ctx->signal_handlers_count; i++) {
+        if (ctx->signal_handlers[i].sig == sig) {
             if (cb) {
-                g_signal_handlers[i].cb = cb;
+                ctx->signal_handlers[i].cb = cb;
             } else {
-                int tail = g_signal_handlers_count - i - 1;
+                int tail = ctx->signal_handlers_count - i - 1;
                 if (tail > 0) {
-                    memmove(&g_signal_handlers[i], &g_signal_handlers[i + 1],
+                    memmove(&ctx->signal_handlers[i], &ctx->signal_handlers[i + 1],
                             (size_t)tail * sizeof(kc_grd_signal_entry_t));
                 }
-                g_signal_handlers_count--;
+                ctx->signal_handlers_count--;
             }
             return 0;
         }
@@ -622,18 +625,18 @@ int kc_grd_on_signal(kc_grd_box_t *ctx, int sig, kc_grd_signal_callback_t cb) {
 
     if (!cb) return 0;
 
-    if (g_signal_handlers_count >= g_signal_handlers_capacity) {
-        int new_cap = g_signal_handlers_capacity ? g_signal_handlers_capacity * 2 : 4;
-        kc_grd_signal_entry_t *p = (kc_grd_signal_entry_t *)realloc(g_signal_handlers,
+    if (ctx->signal_handlers_count >= ctx->signal_handlers_capacity) {
+        int new_cap = ctx->signal_handlers_capacity ? ctx->signal_handlers_capacity * 2 : 4;
+        kc_grd_signal_entry_t *p = (kc_grd_signal_entry_t *)realloc(ctx->signal_handlers,
             (size_t)new_cap * sizeof(kc_grd_signal_entry_t));
         if (!p) return -1;
-        g_signal_handlers = p;
-        g_signal_handlers_capacity = new_cap;
+        ctx->signal_handlers = p;
+        ctx->signal_handlers_capacity = new_cap;
     }
 
-    g_signal_handlers[g_signal_handlers_count].sig = sig;
-    g_signal_handlers[g_signal_handlers_count].cb = cb;
-    g_signal_handlers_count++;
+    ctx->signal_handlers[ctx->signal_handlers_count].sig = sig;
+    ctx->signal_handlers[ctx->signal_handlers_count].cb = cb;
+    ctx->signal_handlers_count++;
 
     return 0;
 }
@@ -647,9 +650,9 @@ int kc_grd_on_signal(kc_grd_box_t *ctx, int sig, kc_grd_signal_callback_t cb) {
 int kc_grd_raise_signal(kc_grd_box_t *ctx, int sig) {
     int i;
     if (!ctx) return -1;
-    for (i = 0; i < g_signal_handlers_count; i++) {
-        if (g_signal_handlers[i].sig == sig) {
-            g_signal_handlers[i].cb(ctx);
+    for (i = 0; i < ctx->signal_handlers_count; i++) {
+        if (ctx->signal_handlers[i].sig == sig) {
+            ctx->signal_handlers[i].cb(ctx);
             return 0;
         }
     }
@@ -662,8 +665,20 @@ int kc_grd_raise_signal(kc_grd_box_t *ctx, int sig) {
  * @return 0 on success, or -1 if ctx is NULL.
  */
 int kc_grd_listen_signals(kc_grd_box_t *ctx) {
+    int i;
     if (!ctx) return -1;
-    g_signal_ctx = ctx;
+    for (i = 0; i < g_signal_ctx_count; i++) {
+        if (g_signal_ctx_list[i] == ctx) return 0;
+    }
+    if (g_signal_ctx_count >= g_signal_ctx_cap) {
+        int new_cap = g_signal_ctx_cap ? g_signal_ctx_cap * 2 : 4;
+        kc_grd_box_t **p = (kc_grd_box_t **)realloc(g_signal_ctx_list,
+            (size_t)new_cap * sizeof(kc_grd_box_t *));
+        if (!p) return -1;
+        g_signal_ctx_list = p;
+        g_signal_ctx_cap = new_cap;
+    }
+    g_signal_ctx_list[g_signal_ctx_count++] = ctx;
     return 0;
 }
 
@@ -676,8 +691,20 @@ int kc_grd_listen_signals(kc_grd_box_t *ctx) {
  * @return 0 on success, or -1 on failure.
  */
 int kc_grd_listen_signal(kc_grd_box_t *ctx, int sig_id) {
+    int i;
     if (!ctx) return -1;
-    g_signal_ctx = ctx;
+    for (i = 0; i < g_signal_ctx_count; i++) {
+        if (g_signal_ctx_list[i] == ctx) return 0;
+    }
+    if (g_signal_ctx_count >= g_signal_ctx_cap) {
+        int new_cap = g_signal_ctx_cap ? g_signal_ctx_cap * 2 : 4;
+        kc_grd_box_t **p = (kc_grd_box_t **)realloc(g_signal_ctx_list,
+            (size_t)new_cap * sizeof(kc_grd_box_t *));
+        if (!p) return -1;
+        g_signal_ctx_list = p;
+        g_signal_ctx_cap = new_cap;
+    }
+    g_signal_ctx_list[g_signal_ctx_count++] = ctx;
 #ifdef _WIN32
     (void)sig_id;
 #else
@@ -692,10 +719,22 @@ int kc_grd_listen_signal(kc_grd_box_t *ctx, int sig_id) {
  * @return None.
  */
 void kc_grd_signal_listener(int sig) {
-    if (g_signal_ctx && kc_grd_raise_signal(g_signal_ctx, sig) == 0)
-        return;
+    int i;
+    for (i = 0; i < g_signal_ctx_count; i++) {
+        if (g_signal_ctx_list[i] && kc_grd_raise_signal(g_signal_ctx_list[i], sig) == 0)
+            return;
+    }
     signal(sig, SIG_DFL);
     raise(sig);
+}
+
+/**
+ * Requests a context to stop at the next opportunity.
+ * @param ctx GRD context or NULL (no-op).
+ * @return void
+ */
+void kc_grd_stop(kc_grd_box_t *ctx) {
+    if (ctx) ctx->stop_requested = 1;
 }
 
 #ifndef KC_GRD_BUILD_VERSION
