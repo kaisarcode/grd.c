@@ -11,7 +11,7 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
-#include "grd.h"
+#include "libgrd.h"
 
 #include <errno.h>
 #include <stdio.h>

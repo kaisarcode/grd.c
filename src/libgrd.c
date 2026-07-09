@@ -7,7 +7,7 @@
  * License: https://www.gnu.org/licenses/gpl-3.0.html
  */
 
-#include "grd.h"
+#include "libgrd.h"
 
 #include <stdlib.h>
 #include <string.h>

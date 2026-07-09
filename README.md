@@ -54,7 +54,7 @@ One line per child box, in the format `index x y w h`:
 ## Public API
 
 ```c
-#include "grd.h"
+#include "libgrd.h"
 
 kc_grd_box_t *root = kc_grd_box_new();
 kc_grd_split_t *s = kc_grd_split_set(root, KC_GRD_ROW);
