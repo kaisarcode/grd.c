@@ -73,12 +73,12 @@ Treat `src/libgrd.h` as a compatibility boundary. Its structures, enums, fields,
 ownership rules, defaults, return values, and pointer lifetimes are public.
 
 Trees are mutable and not thread-safe. Layout, mutation, drag, close, and free
-must not run concurrently on the same tree. Stop and signal state does not cancel
-layout; do not claim asynchronous operation.
+must not run concurrently on the same tree. Stop state does not cancel layout;
+do not claim asynchronous operation.
 
 ## Resource Model
 
-Memory grows with boxes, splits, child arrays, weights, and signal callbacks.
+Memory grows with boxes, splits, child arrays, and weights.
 Layout allocates one temporary integer-size array per visited split and recurses
 through the tree. Deep trees can consume call stack.
 

@@ -27,10 +27,6 @@ static void *zalloc(size_t n) {
     return p;
 }
 
-static kc_grd_box_t **g_signal_ctx_list = NULL;
-static int g_signal_ctx_cap = 0;
-static int g_signal_ctx_count = 0;
-
 /**
  * Clamps a value to zero if negative.
  * @param v Input value.
@@ -205,17 +201,8 @@ kc_grd_box_t *kc_grd_box_new(void) {
  * @return void
  */
 void kc_grd_box_free(kc_grd_box_t *b) {
-    int i;
     if (!b) return;
     split_free(b->split);
-    free(b->signal_handlers);
-    b->signal_handlers = NULL;
-    for (i = 0; i < g_signal_ctx_count; i++) {
-        if (g_signal_ctx_list[i] == b) {
-            g_signal_ctx_list[i] = g_signal_ctx_list[--g_signal_ctx_count];
-            break;
-        }
-    }
     free(b);
 }
 
@@ -594,138 +581,6 @@ void kc_grd_options_free(kc_grd_options_t *opts) {
     opts->kind = NULL;
     free(opts->weights);
     opts->weights = NULL;
-}
-
-/**
- * Register a handler for a library-level signal number.
- * @param ctx GRD context.
- * @param sig Application-defined signal number.
- * @param cb Callback to invoke.
- * @return 0 on success, or -1 on failure.
- */
-int kc_grd_on_signal(kc_grd_box_t *ctx, int sig, kc_grd_signal_callback_t cb) {
-    int i;
-    if (!ctx) return -1;
-
-    for (i = 0; i < ctx->signal_handlers_count; i++) {
-        if (ctx->signal_handlers[i].sig == sig) {
-            if (cb) {
-                ctx->signal_handlers[i].cb = cb;
-            } else {
-                int tail = ctx->signal_handlers_count - i - 1;
-                if (tail > 0) {
-                    memmove(&ctx->signal_handlers[i], &ctx->signal_handlers[i + 1],
-                            (size_t)tail * sizeof(kc_grd_signal_entry_t));
-                }
-                ctx->signal_handlers_count--;
-            }
-            return 0;
-        }
-    }
-
-    if (!cb) return 0;
-
-    if (ctx->signal_handlers_count >= ctx->signal_handlers_capacity) {
-        int new_cap = ctx->signal_handlers_capacity ? ctx->signal_handlers_capacity * 2 : 4;
-        kc_grd_signal_entry_t *p = (kc_grd_signal_entry_t *)realloc(ctx->signal_handlers,
-            (size_t)new_cap * sizeof(kc_grd_signal_entry_t));
-        if (!p) return -1;
-        ctx->signal_handlers = p;
-        ctx->signal_handlers_capacity = new_cap;
-    }
-
-    ctx->signal_handlers[ctx->signal_handlers_count].sig = sig;
-    ctx->signal_handlers[ctx->signal_handlers_count].cb = cb;
-    ctx->signal_handlers_count++;
-
-    return 0;
-}
-
-/**
- * Raise a library-level signal.
- * @param ctx GRD context.
- * @param sig Signal number to raise.
- * @return 0 if handled, or -1 if no handler.
- */
-int kc_grd_raise_signal(kc_grd_box_t *ctx, int sig) {
-    int i;
-    if (!ctx) return -1;
-    for (i = 0; i < ctx->signal_handlers_count; i++) {
-        if (ctx->signal_handlers[i].sig == sig) {
-            ctx->signal_handlers[i].cb(ctx);
-            return 0;
-        }
-    }
-    return -1;
-}
-
-/**
- * Set the internal signal-listener context.
- * @param ctx GRD context.
- * @return 0 on success, or -1 if ctx is NULL.
- */
-int kc_grd_listen_signals(kc_grd_box_t *ctx) {
-    int i;
-    if (!ctx) return -1;
-    for (i = 0; i < g_signal_ctx_count; i++) {
-        if (g_signal_ctx_list[i] == ctx) return 0;
-    }
-    if (g_signal_ctx_count >= g_signal_ctx_cap) {
-        int new_cap = g_signal_ctx_cap ? g_signal_ctx_cap * 2 : 4;
-        kc_grd_box_t **p = (kc_grd_box_t **)realloc(g_signal_ctx_list,
-            (size_t)new_cap * sizeof(kc_grd_box_t *));
-        if (!p) return -1;
-        g_signal_ctx_list = p;
-        g_signal_ctx_cap = new_cap;
-    }
-    g_signal_ctx_list[g_signal_ctx_count++] = ctx;
-    return 0;
-}
-
-#include <signal.h>
-
-/**
- * Wire an OS signal to the library signal listener.
- * @param ctx GRD context.
- * @param sig_id OS signal number.
- * @return 0 on success, or -1 on failure.
- */
-int kc_grd_listen_signal(kc_grd_box_t *ctx, int sig_id) {
-    int i;
-    if (!ctx) return -1;
-    for (i = 0; i < g_signal_ctx_count; i++) {
-        if (g_signal_ctx_list[i] == ctx) return 0;
-    }
-    if (g_signal_ctx_count >= g_signal_ctx_cap) {
-        int new_cap = g_signal_ctx_cap ? g_signal_ctx_cap * 2 : 4;
-        kc_grd_box_t **p = (kc_grd_box_t **)realloc(g_signal_ctx_list,
-            (size_t)new_cap * sizeof(kc_grd_box_t *));
-        if (!p) return -1;
-        g_signal_ctx_list = p;
-        g_signal_ctx_cap = new_cap;
-    }
-    g_signal_ctx_list[g_signal_ctx_count++] = ctx;
-#ifdef _WIN32
-    (void)sig_id;
-#else
-    signal(sig_id, kc_grd_signal_listener);
-#endif
-    return 0;
-}
-
-/**
- * Generic signal-listener compatible with signal() / sigaction().
- * @param sig OS signal number.
- * @return None.
- */
-void kc_grd_signal_listener(int sig) {
-    int i;
-    for (i = 0; i < g_signal_ctx_count; i++) {
-        if (g_signal_ctx_list[i] && kc_grd_raise_signal(g_signal_ctx_list[i], sig) == 0)
-            return;
-    }
-    signal(sig, SIG_DFL);
-    raise(sig);
 }
 
 /**

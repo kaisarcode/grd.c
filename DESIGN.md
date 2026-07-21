@@ -8,7 +8,7 @@ when bounds change, when layout runs, and how resulting boxes are used.
 
 ## Architecture
 
-A box owns geometry, style insets, optional signal state, and at most one split.
+A box owns geometry, style insets, and at most one split.
 A split owns an ordered child array, parallel weight array, axis, gap,
 minimum-size rule, and temporary drag state.
 

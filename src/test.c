@@ -18,32 +18,8 @@
 #include <process.h>
 #define getpid _getpid
 #else
-#include <signal.h>
 #include <unistd.h>
 #endif
-
-static int signal_count = 0;
-static kc_grd_box_t *signal_ctx_seen = NULL;
-
-/**
- * Records one signal callback invocation.
- * @param ctx Context supplied by the library.
- * @return None.
- */
-static void count_signal(kc_grd_box_t *ctx) {
-    if (ctx) { signal_count++; signal_ctx_seen = ctx; }
-}
-
-static int signal_count_b = 0;
-
-/**
- * Records one replacement signal callback invocation.
- * @param ctx Context supplied by the library.
- * @return None.
- */
-static void count_signal_b(kc_grd_box_t *ctx) {
-    if (ctx) { signal_count_b++; }
-}
 
 /**
  * Verifies one integer result.
@@ -350,98 +326,6 @@ static int case_stop(void) {
 }
 
 /**
- * Tests kc_grd_on_signal.
- * @return 0 on success, 1 on failure.
- */
-static int case_on_signal(void) {
-    kc_grd_box_t *b = kc_grd_box_new();
-    signal_count = 0;
-    signal_count_b = 0;
-    expect_int("on_signal NULL returns -1", -1, kc_grd_on_signal(NULL, 1, count_signal));
-    expect_int("remove missing returns 0", 0, kc_grd_on_signal(b, 1, NULL));
-    expect_int("register returns 0", 0, kc_grd_on_signal(b, 1, count_signal));
-    expect_int("raise returns 0", 0, kc_grd_raise_signal(b, 1));
-    expect_int("handler invoked", 1, signal_count);
-    expect_int("replace returns 0", 0, kc_grd_on_signal(b, 1, count_signal_b));
-    signal_count = 0; signal_count_b = 0;
-    kc_grd_raise_signal(b, 1);
-    expect_int("old not invoked", 0, signal_count);
-    expect_int("replacement invoked", 1, signal_count_b);
-    expect_int("remove returns 0", 0, kc_grd_on_signal(b, 1, NULL));
-    expect_int("raise removed returns -1", -1, kc_grd_raise_signal(b, 1));
-    kc_grd_box_free(b);
-    return 0;
-}
-
-/**
- * Tests kc_grd_raise_signal.
- * @return 0 on success, 1 on failure.
- */
-static int case_raise_signal(void) {
-    kc_grd_box_t *b = kc_grd_box_new();
-    signal_count = 0;
-    signal_ctx_seen = NULL;
-    expect_int("raise_signal NULL returns -1", -1, kc_grd_raise_signal(NULL, 1));
-    expect_int("raise unhandled returns -1", -1, kc_grd_raise_signal(b, 1));
-    kc_grd_on_signal(b, 1, count_signal);
-    expect_int("raise handled returns 0", 0, kc_grd_raise_signal(b, 1));
-    expect_true("context matches", signal_ctx_seen == b);
-    kc_grd_box_free(b);
-    return 0;
-}
-
-/**
- * Tests kc_grd_listen_signals.
- * @return 0 on success, 1 on failure.
- */
-static int case_listen_signals(void) {
-    kc_grd_box_t *b = kc_grd_box_new();
-    signal_count = 0;
-    signal_ctx_seen = NULL;
-    expect_int("listen_signals NULL returns -1", -1, kc_grd_listen_signals(NULL));
-    kc_grd_on_signal(b, 44, count_signal);
-    expect_int("listen_signals returns 0", 0, kc_grd_listen_signals(b));
-    kc_grd_signal_listener(44);
-    expect_int("listener dispatched", 1, signal_count);
-    expect_true("correct context", signal_ctx_seen == b);
-    kc_grd_box_free(b);
-    return 0;
-}
-
-/**
- * Tests kc_grd_listen_signal.
- * @return 0 on success, 1 on failure.
- */
-static int case_listen_signal(void) {
-    kc_grd_box_t *b = kc_grd_box_new();
-    expect_int("listen_signal NULL returns -1", -1, kc_grd_listen_signal(NULL, 1));
-#ifdef _WIN32
-    expect_int("listen_signal returns 0", 0, kc_grd_listen_signal(b, 2));
-#else
-    expect_int("listen_signal returns 0", 0, kc_grd_listen_signal(b, SIGUSR1));
-#endif
-    kc_grd_box_free(b);
-    return 0;
-}
-
-/**
- * Tests kc_grd_signal_listener.
- * @return 0 on success, 1 on failure.
- */
-static int case_signal_listener(void) {
-    kc_grd_box_t *b = kc_grd_box_new();
-    signal_count = 0;
-    signal_ctx_seen = NULL;
-    kc_grd_on_signal(b, 55, count_signal);
-    kc_grd_listen_signals(b);
-    kc_grd_signal_listener(55);
-    expect_int("signal_listener invokes", 1, signal_count);
-    expect_true("correct context", signal_ctx_seen == b);
-    kc_grd_box_free(b);
-    return 0;
-}
-
-/**
  * Tests two contexts coexist.
  * @return 0 on success, 1 on failure.
  */
@@ -485,11 +369,6 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "box-close") == 0) return case_box_close();
     if (strcmp(argv[1], "split-at") == 0) return case_split_at();
     if (strcmp(argv[1], "stop") == 0) return case_stop();
-    if (strcmp(argv[1], "on-signal") == 0) return case_on_signal();
-    if (strcmp(argv[1], "raise-signal") == 0) return case_raise_signal();
-    if (strcmp(argv[1], "listen-signals") == 0) return case_listen_signals();
-    if (strcmp(argv[1], "listen-signal") == 0) return case_listen_signal();
-    if (strcmp(argv[1], "signal-listener") == 0) return case_signal_listener();
     if (strcmp(argv[1], "multictx") == 0) return case_multictx();
     fprintf(stderr, "unknown test case: %s\n", argv[1]);
     return 2;
