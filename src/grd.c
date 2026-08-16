@@ -12,13 +12,12 @@
 #endif
 
 #include "libgrd.h"
+#include "parson.h"
 
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#define KC_GRD_WEIGHTS_CAP 256
 
 /**
  * Prints usage help to stdout.
@@ -135,7 +134,128 @@ static int kc_grd_parse_weights(const char *text, float *weights, int cap) {
 }
 
 /**
- * Executes the split subcommand and prints one child per line.
+ * Builds the split runner payload from parsed arguments.
+ * @param width Root width in pixels.
+ * @param height Root height in pixels.
+ * @param kind Split direction.
+ * @param weights Array of proportional weights.
+ * @param weight_count Number of weights.
+ * @param gap Gap between children in pixels.
+ * @param min_px Minimum child size in pixels.
+ * @return malloc'd payload string, or NULL on allocation failure.
+ */
+static char *kc_grd_payload_build(
+    int width, int height,
+    kc_grd_kind_t kind, const float *weights, int weight_count,
+    int gap, int min_px
+) {
+    JSON_Value *root = NULL;
+    JSON_Value *args = NULL;
+    JSON_Value *arr = NULL;
+    char *out = NULL;
+    int i;
+
+    root = json_value_init_object();
+    args = json_value_init_object();
+    arr = json_value_init_array();
+    if (root == NULL || args == NULL || arr == NULL) {
+        json_value_free(root);
+        json_value_free(args);
+        json_value_free(arr);
+        return NULL;
+    }
+
+    for (i = 0; i < weight_count; i++) {
+        JSON_Value *wv = json_value_init_number((double)weights[i]);
+        if (wv == NULL ||
+            json_array_append_value(json_value_get_array(arr), wv) !=
+                JSONSuccess) {
+            json_value_free(wv);
+            json_value_free(root);
+            json_value_free(args);
+            json_value_free(arr);
+            return NULL;
+        }
+    }
+
+    if (json_object_set_value(json_value_get_object(args), "W", arr) !=
+        JSONSuccess) {
+        json_value_free(root);
+        json_value_free(args);
+        json_value_free(arr);
+        return NULL;
+    }
+    arr = NULL;
+
+    json_object_set_number(json_value_get_object(args), "w", (double)width);
+    json_object_set_number(json_value_get_object(args), "h", (double)height);
+    json_object_set_string(json_value_get_object(args), "k",
+        kind == KC_GRD_COL ? "col" : "row");
+    json_object_set_number(json_value_get_object(args), "g", (double)gap);
+    json_object_set_number(json_value_get_object(args), "m", (double)min_px);
+
+    if (json_object_set_value(json_value_get_object(root), "args", args) !=
+        JSONSuccess) {
+        json_value_free(root);
+        json_value_free(args);
+        return NULL;
+    }
+    args = NULL;
+
+    json_object_set_string(json_value_get_object(root), "cmd", "split");
+
+    out = json_serialize_to_string(root);
+    json_value_free(root);
+    return out;
+}
+
+/**
+ * Prints the boxes of a runner result as one line per child.
+ * @param result Runner JSON result string.
+ * @return 0 on success, or -1 on a malformed result.
+ */
+static int kc_grd_print_boxes(const char *result) {
+    JSON_Value *root = NULL;
+    JSON_Object *o;
+    JSON_Value *rv;
+    JSON_Object *ro;
+    JSON_Array *boxes;
+    size_t i;
+    size_t n;
+    int rc = -1;
+
+    root = json_parse_string(result);
+    if (root == NULL) return -1;
+    o = json_value_get_object(root);
+    if (o == NULL) goto done;
+    rv = json_object_get_value(o, "result");
+    if (rv == NULL || json_value_get_type(rv) != JSONObject) goto done;
+    ro = json_value_get_object(rv);
+    boxes = json_object_get_array(ro, "boxes");
+    if (boxes == NULL) goto done;
+
+    n = json_array_get_count(boxes);
+    for (i = 0; i < n; i++) {
+        JSON_Value *bv = json_array_get_value(boxes, i);
+        JSON_Object *bo;
+        if (bv == NULL || json_value_get_type(bv) != JSONObject) goto done;
+        bo = json_value_get_object(bv);
+        printf("%d %d %d %d %d\n",
+            (int)json_object_get_number(bo, "index"),
+            (int)json_object_get_number(bo, "x"),
+            (int)json_object_get_number(bo, "y"),
+            (int)json_object_get_number(bo, "w"),
+            (int)json_object_get_number(bo, "h"));
+    }
+    rc = 0;
+done:
+    json_value_free(root);
+    return rc;
+}
+
+/**
+ * Executes the split subcommand through the runner and prints one child per
+ * line.
  * @param width Root width in pixels.
  * @param height Root height in pixels.
  * @param kind Split direction.
@@ -150,55 +270,33 @@ static int kc_grd_cmd_split(
     kc_grd_kind_t kind, float *weights, int weight_count,
     int gap, int min_px
 ) {
-    kc_grd_box_t *root;
-    kc_grd_split_t *s;
-    kc_grd_box_t *child;
-    int i;
+    char *payload;
+    char *result;
+    char *err = NULL;
+    int rc;
 
-    root = kc_grd_box_new();
-    if (!root) {
+    payload = kc_grd_payload_build(width, height, kind, weights,
+        weight_count, gap, min_px);
+    if (payload == NULL) {
         fprintf(stderr, "Error: allocation failed.\n");
         return 1;
     }
 
-    root->border = 0;
-    root->padding = 0;
-
-    s = kc_grd_split_set(root, kind);
-    if (!s) {
-        fprintf(stderr, "Error: split setup failed.\n");
-        kc_grd_box_free(root);
+    result = kc_grd_run(payload, &err);
+    free(payload);
+    if (result == NULL) {
+        fprintf(stderr, "Error: %s\n",
+            err != NULL ? err : "unknown error");
+        free(err);
         return 1;
     }
 
-    kc_grd_split_gap(s, gap, min_px);
-
-    for (i = 0; i < weight_count; i++) {
-        child = kc_grd_box_new();
-        if (!child) {
-            fprintf(stderr, "Error: allocation failed.\n");
-            kc_grd_box_free(root);
-            return 1;
-        }
-        child->border = 0;
-        child->padding = 0;
-        if (kc_grd_split_add(s, child, weights[i]) != 0) {
-            fprintf(stderr, "Error: split add failed.\n");
-            kc_grd_box_free(child);
-            kc_grd_box_free(root);
-            return 1;
-        }
+    rc = kc_grd_print_boxes(result);
+    free(result);
+    if (rc != 0) {
+        fprintf(stderr, "Error: unexpected runner result.\n");
+        return 1;
     }
-
-    kc_grd_box_bounds(root, 0, 0, width, height);
-    kc_grd_box_layout(root);
-
-    for (i = 0; i < s->count; i++) {
-        kc_grd_box_t *c = kc_grd_split_at(s, i);
-        printf("%d %d %d %d %d\n", i, c->x, c->y, c->w, c->h);
-    }
-
-    kc_grd_box_free(root);
     return 0;
 }
 

@@ -8,10 +8,14 @@
  */
 
 #include "libgrd.h"
+#include "parson.h"
 
+#include <limits.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stddef.h>
 
 /**
  * Allocates n bytes of zeroed memory.
@@ -500,6 +504,66 @@ kc_grd_box_t *kc_grd_split_at(const kc_grd_split_t *s, int i) {
     return s->children[i];
 }
 
+/**
+ * Builds and lays out one non-nested split tree from raw parameters.
+ * Internal helper shared by the runner commands.
+ * @param width Root width in pixels.
+ * @param height Root height in pixels.
+ * @param kind Split direction.
+ * @param weights Array of proportional weights.
+ * @param weight_count Number of weights.
+ * @param gap Gap between children in pixels.
+ * @param min_px Minimum child size in pixels.
+ * @param out_root Receives the laid-out root box, or NULL on failure.
+ * @return 0 on success, or -1 on invalid input or allocation failure.
+ */
+static int kc_grd_split_compute(int width, int height, kc_grd_kind_t kind,
+    const float *weights, int weight_count, int gap, int min_px,
+    kc_grd_box_t **out_root) {
+    kc_grd_box_t *root;
+    kc_grd_split_t *s;
+    kc_grd_box_t *child;
+    int i;
+
+    if (out_root == NULL) return -1;
+    *out_root = NULL;
+    if (weights == NULL || weight_count < 1) return -1;
+
+    root = kc_grd_box_new();
+    if (root == NULL) return -1;
+    root->border = 0;
+    root->padding = 0;
+
+    s = kc_grd_split_set(root, kind);
+    if (s == NULL) {
+        kc_grd_box_free(root);
+        return -1;
+    }
+
+    kc_grd_split_gap(s, gap, min_px);
+
+    for (i = 0; i < weight_count; i++) {
+        child = kc_grd_box_new();
+        if (child == NULL) {
+            kc_grd_box_free(root);
+            return -1;
+        }
+        child->border = 0;
+        child->padding = 0;
+        if (kc_grd_split_add(s, child, weights[i]) != 0) {
+            kc_grd_box_free(child);
+            kc_grd_box_free(root);
+            return -1;
+        }
+    }
+
+    kc_grd_box_bounds(root, 0, 0, width, height);
+    kc_grd_box_layout(root);
+
+    *out_root = root;
+    return 0;
+}
+
 typedef enum {
     KC_ENV_TYPE_INT,
     KC_ENV_TYPE_FLOAT,
@@ -602,4 +666,237 @@ void kc_grd_stop(kc_grd_box_t *ctx) {
  */
 uint64_t kc_grd_version(void) {
     return (uint64_t)KC_GRD_BUILD_VERSION;
+}
+
+/**
+ * Sets a malloc'd error message for the runner.
+ * @param out_err Error output pointer.
+ * @param fmt printf-style format string.
+ * @return void
+ */
+static void kc_grd_set_err(char **out_err, const char *fmt, ...) {
+    va_list ap;
+    char buf[256];
+
+    if (out_err == NULL) return;
+    *out_err = NULL;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    *out_err = strdup(buf);
+}
+
+/**
+ * Reads an integer runner argument that must be a whole number.
+ * @param o Args object.
+ * @param key Key name.
+ * @param out Receives the value.
+ * @param allow_zero 1 to allow zero, 0 to require positive.
+ * @return 1 on success, 0 on missing, non-number, fractional, or out-of-range.
+ */
+static int kc_grd_arg_int(const JSON_Object *o, const char *key, double *out,
+    int allow_zero) {
+    JSON_Value *v;
+    double d;
+
+    v = json_object_get_value(o, key);
+    if (v == NULL || json_value_get_type(v) != JSONNumber) return 0;
+    d = json_value_get_number(v);
+    if (d > (double)INT_MAX || d < (double)INT_MIN) return 0;
+    if (d != (double)(long)d) return 0;
+    if (!allow_zero && d <= 0) return 0;
+    if (allow_zero && d < 0) return 0;
+    *out = d;
+    return 1;
+}
+
+/**
+ * Builds the standard runner response JSON for a laid-out split.
+ * @param s Split to serialize.
+ * @return malloc'd JSON string, or NULL on allocation failure.
+ */
+static char *kc_grd_run_serialize(const kc_grd_split_t *s) {
+    JSON_Value *root = NULL;
+    JSON_Value *result = NULL;
+    JSON_Value *boxes = NULL;
+    char *out = NULL;
+    int i;
+
+    root = json_value_init_object();
+    result = json_value_init_object();
+    boxes = json_value_init_array();
+    if (root == NULL || result == NULL || boxes == NULL) {
+        json_value_free(root);
+        json_value_free(result);
+        json_value_free(boxes);
+        return NULL;
+    }
+
+    for (i = 0; i < s->count; i++) {
+        kc_grd_box_t *c = kc_grd_split_at(s, i);
+        JSON_Value *box = json_value_init_object();
+        JSON_Object *bo;
+
+        if (box == NULL) {
+            json_value_free(root);
+            json_value_free(result);
+            json_value_free(boxes);
+            return NULL;
+        }
+        bo = json_value_get_object(box);
+        json_object_set_number(bo, "index", (double)i);
+        json_object_set_number(bo, "x", (double)c->x);
+        json_object_set_number(bo, "y", (double)c->y);
+        json_object_set_number(bo, "w", (double)c->w);
+        json_object_set_number(bo, "h", (double)c->h);
+        if (json_array_append_value(json_value_get_array(boxes), box) !=
+            JSONSuccess) {
+            json_value_free(box);
+            json_value_free(root);
+            json_value_free(result);
+            json_value_free(boxes);
+            return NULL;
+        }
+    }
+
+    json_object_set_value(json_value_get_object(result), "boxes", boxes);
+    json_object_set_value(json_value_get_object(root), "result", result);
+    json_object_set_number(json_value_get_object(root), "handle", 0);
+
+    out = json_serialize_to_string(root);
+    json_value_free(root);
+    return out;
+}
+
+/**
+ * Executes a CLI subcommand from a JSON payload and returns the result as a
+ * JSON string. This is the canonical implementation of the CLI's
+ * functionality, including validation.
+ * @param payload_json JSON payload with "cmd" and "args".
+ * @param out_err Receives a malloc'd error message on failure, or NULL on
+ *     success.
+ * @return malloc'd JSON result string, or NULL on failure.
+ */
+char *kc_grd_run(const char *payload_json, char **out_err) {
+    JSON_Value *root;
+    JSON_Object *o;
+    const char *cmd;
+    double w = 0;
+    double h = 0;
+    double gap = 0;
+    double min_px = 1;
+    float weights[KC_GRD_WEIGHTS_CAP];
+    int weight_count = 0;
+    kc_grd_kind_t k = KC_GRD_ROW;
+    kc_grd_box_t *box = NULL;
+    char *result = NULL;
+    JSON_Value *v;
+    int i;
+
+    if (out_err != NULL) *out_err = NULL;
+    if (payload_json == NULL) {
+        kc_grd_set_err(out_err, "missing payload");
+        return NULL;
+    }
+
+    root = json_parse_string(payload_json);
+    if (root == NULL || json_value_get_type(root) != JSONObject) {
+        json_value_free(root);
+        kc_grd_set_err(out_err, "missing or invalid \"cmd\"");
+        return NULL;
+    }
+    o = json_value_get_object(root);
+
+    cmd = json_object_get_string(o, "cmd");
+    if (cmd == NULL) {
+        kc_grd_set_err(out_err, "missing or invalid \"cmd\"");
+        goto fail;
+    }
+    if (strcmp(cmd, "split") != 0) {
+        kc_grd_set_err(out_err, "unknown command \"%s\"", cmd);
+        goto fail;
+    }
+
+    v = json_object_get_value(o, "args");
+    if (v == NULL || json_value_get_type(v) != JSONObject) {
+        kc_grd_set_err(out_err, "missing or invalid \"args\"");
+        goto fail;
+    }
+    o = json_value_get_object(v);
+
+    if (!kc_grd_arg_int(o, "w", &w, 0)) {
+        kc_grd_set_err(out_err, "missing or invalid \"w\"");
+        goto fail;
+    }
+    if (!kc_grd_arg_int(o, "h", &h, 0)) {
+        kc_grd_set_err(out_err, "missing or invalid \"h\"");
+        goto fail;
+    }
+
+    v = json_object_get_value(o, "k");
+    if (v != NULL) {
+        const char *kind;
+        if (json_value_get_type(v) != JSONString) {
+            kc_grd_set_err(out_err, "missing or invalid \"k\"");
+            goto fail;
+        }
+        kind = json_value_get_string(v);
+        if (strcmp(kind, "col") == 0) {
+            k = KC_GRD_COL;
+        } else if (strcmp(kind, "row") != 0) {
+            kc_grd_set_err(out_err, "missing or invalid \"k\"");
+            goto fail;
+        }
+    }
+
+    v = json_object_get_value(o, "W");
+    if (v == NULL || json_value_get_type(v) != JSONArray) {
+        kc_grd_set_err(out_err, "missing or invalid \"W\"");
+        goto fail;
+    }
+    weight_count = (int)json_array_get_count(json_value_get_array(v));
+    if (weight_count < 2 || weight_count > KC_GRD_WEIGHTS_CAP) {
+        kc_grd_set_err(out_err, "missing or invalid \"W\"");
+        goto fail;
+    }
+    for (i = 0; i < weight_count; i++) {
+        JSON_Value *wv = json_array_get_value(json_value_get_array(v),
+            (size_t)i);
+        double wgt;
+        if (wv == NULL || json_value_get_type(wv) != JSONNumber) {
+            kc_grd_set_err(out_err, "missing or invalid \"W\"");
+            goto fail;
+        }
+        wgt = json_value_get_number(wv);
+        if (wgt <= 0) {
+            kc_grd_set_err(out_err, "missing or invalid \"W\"");
+            goto fail;
+        }
+        weights[i] = (float)wgt;
+    }
+
+    v = json_object_get_value(o, "g");
+    if (v != NULL && !kc_grd_arg_int(o, "g", &gap, 1)) {
+        kc_grd_set_err(out_err, "missing or invalid \"g\"");
+        goto fail;
+    }
+    v = json_object_get_value(o, "m");
+    if (v != NULL && !kc_grd_arg_int(o, "m", &min_px, 1)) {
+        kc_grd_set_err(out_err, "missing or invalid \"m\"");
+        goto fail;
+    }
+
+    if (kc_grd_split_compute((int)w, (int)h, k, weights, weight_count,
+            (int)gap, (int)min_px, &box) != 0) {
+        kc_grd_set_err(out_err, "allocation failure");
+        goto fail;
+    }
+    result = kc_grd_run_serialize(box->split);
+    if (result == NULL) {
+        kc_grd_set_err(out_err, "allocation failure");
+    }
+fail:
+    kc_grd_box_free(box);
+    json_value_free(root);
+    return result;
 }

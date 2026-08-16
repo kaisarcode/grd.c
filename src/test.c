@@ -342,6 +342,109 @@ static int case_multictx(void) {
 }
 
 /**
+ * Runs the runner and verifies the exact JSON for a row split.
+ * @return 0 on success, 1 on failure.
+ */
+static int case_run_split_row(void) {
+    const char *payload =
+        "{\"cmd\":\"split\",\"args\":{\"w\":1920,\"h\":1080,\"k\":\"row\","
+        "\"W\":[1,2,1],\"g\":0,\"m\":1}}";
+    const char *expected =
+        "{\"result\":{\"boxes\":["
+        "{\"index\":0,\"x\":0,\"y\":0,\"w\":480,\"h\":1080},"
+        "{\"index\":1,\"x\":480,\"y\":0,\"w\":960,\"h\":1080},"
+        "{\"index\":2,\"x\":1440,\"y\":0,\"w\":480,\"h\":1080}"
+        "]},\"handle\":0}";
+    char *out_err = NULL;
+    char *res = kc_grd_run(payload, &out_err);
+    int fail = 0;
+
+    fail |= expect_true("run split row returns result", res != NULL);
+    fail |= expect_true("run split row matches exact json",
+        res != NULL && strcmp(res, expected) == 0);
+    fail |= expect_true("run split row clears out_err", out_err == NULL);
+    free(res);
+    free(out_err);
+    return fail;
+}
+
+/**
+ * Runs the runner and verifies the exact JSON for a column split with a gap.
+ * @return 0 on success, 1 on failure.
+ */
+static int case_run_split_col_gap(void) {
+    const char *payload =
+        "{\"cmd\":\"split\",\"args\":{\"w\":800,\"h\":600,\"k\":\"col\","
+        "\"W\":[1,1,1,1],\"g\":4}}";
+    const char *expected =
+        "{\"result\":{\"boxes\":["
+        "{\"index\":0,\"x\":0,\"y\":0,\"w\":800,\"h\":147},"
+        "{\"index\":1,\"x\":0,\"y\":151,\"w\":800,\"h\":147},"
+        "{\"index\":2,\"x\":0,\"y\":302,\"w\":800,\"h\":147},"
+        "{\"index\":3,\"x\":0,\"y\":453,\"w\":800,\"h\":147}"
+        "]},\"handle\":0}";
+    char *out_err = NULL;
+    char *res = kc_grd_run(payload, &out_err);
+    int fail = 0;
+
+    fail |= expect_true("run split col gap returns result", res != NULL);
+    fail |= expect_true("run split col gap matches exact json",
+        res != NULL && strcmp(res, expected) == 0);
+    free(res);
+    free(out_err);
+    return fail;
+}
+
+/**
+ * Verifies that one payload is rejected with a NULL result and an error set.
+ * @param name Check description.
+ * @param payload Runner payload.
+ * @return 0 on success, 1 on failure.
+ */
+static int run_rejects(const char *name, const char *payload) {
+    char *out_err = NULL;
+    char *res = kc_grd_run(payload, &out_err);
+    int ok = expect_true(name, res == NULL);
+
+    if (ok) ok = expect_true(name, out_err != NULL);
+    free(res);
+    free(out_err);
+    return ok;
+}
+
+/**
+ * Tests runner error handling for malformed and invalid payloads.
+ * @return 0 on success, 1 on failure.
+ */
+static int case_run_errors(void) {
+    int rc = 0;
+
+    rc |= run_rejects("run rejects non-json",
+        "not-json");
+    rc |= run_rejects("run rejects missing cmd",
+        "{\"args\":{\"w\":1,\"h\":1,\"W\":[1,2]}}");
+    rc |= run_rejects("run rejects unknown cmd",
+        "{\"cmd\":\"bogus\",\"args\":{\"w\":1,\"h\":1,\"W\":[1,2]}}");
+    rc |= run_rejects("run rejects missing w",
+        "{\"cmd\":\"split\",\"args\":{\"h\":1080,\"W\":[1,2]}}");
+    rc |= run_rejects("run rejects non-positive w",
+        "{\"cmd\":\"split\",\"args\":{\"w\":0,\"h\":1080,\"W\":[1,2]}}");
+    rc |= run_rejects("run rejects missing h",
+        "{\"cmd\":\"split\",\"args\":{\"w\":1920,\"W\":[1,2]}}");
+    rc |= run_rejects("run rejects bad kind",
+        "{\"cmd\":\"split\",\"args\":{\"w\":1920,\"h\":1080,\"k\":\"diag\",\"W\":[1,2]}}");
+    rc |= run_rejects("run rejects single weight",
+        "{\"cmd\":\"split\",\"args\":{\"w\":1920,\"h\":1080,\"W\":[1]}}");
+    rc |= run_rejects("run rejects non-positive weight",
+        "{\"cmd\":\"split\",\"args\":{\"w\":1920,\"h\":1080,\"W\":[1,-2]}}");
+    rc |= run_rejects("run rejects negative gap",
+        "{\"cmd\":\"split\",\"args\":{\"w\":1920,\"h\":1080,\"W\":[1,2],\"g\":-1}}");
+    rc |= run_rejects("run rejects fractional w",
+        "{\"cmd\":\"split\",\"args\":{\"w\":1920.5,\"h\":1080,\"W\":[1,2]}}");
+    return rc;
+}
+
+/**
  * Runs one libgrd public API test case.
  * @param argc Argument count.
  * @param argv Argument vector.
@@ -370,6 +473,9 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "split-at") == 0) return case_split_at();
     if (strcmp(argv[1], "stop") == 0) return case_stop();
     if (strcmp(argv[1], "multictx") == 0) return case_multictx();
+    if (strcmp(argv[1], "run-split-row") == 0) return case_run_split_row();
+    if (strcmp(argv[1], "run-split-col-gap") == 0) return case_run_split_col_gap();
+    if (strcmp(argv[1], "run-errors") == 0) return case_run_errors();
     fprintf(stderr, "unknown test case: %s\n", argv[1]);
     return 2;
 }

@@ -14,10 +14,18 @@ minimum-size rule, and temporary drag state.
 
 The four source files have fixed responsibilities:
 
-- `src/grd.c` owns CLI parsing and flat split output;
-- `src/libgrd.c` owns all tree and geometry behavior;
+- `src/grd.c` owns CLI parsing, payload building, and flat split output;
+- `src/libgrd.c` owns all tree and geometry behavior plus the runner;
 - `src/libgrd.h` exposes structures and the public contract;
 - `src/test.c` contains all tests.
+
+`kc_grd_run()` in `src/libgrd.c` is the canonical implementation of the CLI's
+`split` functionality (validation plus layout), exposed as an in-process
+function that takes a JSON payload and returns a JSON result. The CLI builds a
+payload from argv, calls `kc_grd_run()`, and formats the returned boxes to the
+same stdout rows as before; its public interface is unchanged. Payload
+parsing, building, and result serialization use the vendored Parson JSON
+library (`lib/parson/`).
 
 ## Axis Model
 
@@ -121,6 +129,31 @@ index x y w h
 
 CLI width and height must be positive; gap and minimum must be non-negative.
 Environment options are loaded before command-line overrides.
+
+## Runner Contract
+
+`kc_grd_run(const char *payload_json, char **out_err)` executes the CLI's
+`split` functionality in-process. Request parsing and response serialization
+use the vendored Parson JSON library. Request:
+
+```json
+{ "cmd": "split", "args": { "w": 1920, "h": 1080, "k": "row", "W": [1, 2, 1], "g": 0, "m": 1 } }
+```
+
+`w` and `h` are positive integers, `k` is `"row"` (default) or `"col"`, `W` is
+at least two positive numbers (at most 256), `g` defaults to 0, `m` defaults to
+1. Validation strictness mirrors the CLI.
+
+Success returns a malloc'd JSON string:
+
+```json
+{ "result": { "boxes": [ { "index": 0, "x": 0, "y": 0, "w": 480, "h": 1080 }, ... ] }, "handle": 0 }
+```
+
+`index x y w h` values equal the CLI rows. Failure returns `NULL` and sets
+`*out_err` to a malloc'd message such as `missing or invalid "w"` or
+`unknown command "bogus"`. The caller frees both the result and the error
+message. grd is stateless, so `handle` is ignored and echoed as 0.
 
 ## Resource and Failure Model
 

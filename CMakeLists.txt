@@ -28,7 +28,7 @@ else()
     add_compile_options(/O2 /W3 /WX)
 endif()
 
-set(GRD_SOURCES src/libgrd.c)
+set(GRD_SOURCES src/libgrd.c lib/parson/parson.c)
 set(GRD_HEADERS src/grd.h)
 
 set_source_files_properties(src/libgrd.c PROPERTIES
@@ -38,15 +38,15 @@ set_source_files_properties(src/libgrd.c PROPERTIES
 if(NOT GRD_TEST_EXTERNAL_ARTIFACTS)
     add_library(grd_shared SHARED ${GRD_SOURCES})
     set_target_properties(grd_shared PROPERTIES OUTPUT_NAME grd PREFIX "lib")
-    target_include_directories(grd_shared PRIVATE src)
+    target_include_directories(grd_shared PRIVATE src lib/parson)
 
     add_library(grd_static STATIC ${GRD_SOURCES})
     set_target_properties(grd_static PROPERTIES OUTPUT_NAME grd PREFIX "lib")
-    target_include_directories(grd_static PRIVATE src)
+    target_include_directories(grd_static PRIVATE src lib/parson)
 
     add_executable(grd_exe src/grd.c ${GRD_SOURCES})
     set_target_properties(grd_exe PROPERTIES OUTPUT_NAME grd)
-    target_include_directories(grd_exe PRIVATE src)
+    target_include_directories(grd_exe PRIVATE src lib/parson)
 
     if(UNIX AND NOT ANDROID AND NOT APPLE)
         target_link_libraries(grd_shared m)
@@ -81,7 +81,7 @@ if(GRD_BUILD_TESTS)
     endif()
 
     add_executable(grd_contract_test src/test.c)
-    target_include_directories(grd_contract_test PRIVATE src)
+    target_include_directories(grd_contract_test PRIVATE src lib/parson)
     target_link_libraries(grd_contract_test PRIVATE ${GRD_TEST_SHARED_TARGET})
 
     if(UNIX AND NOT ANDROID AND NOT APPLE)
@@ -112,4 +112,7 @@ if(GRD_BUILD_TESTS)
     add_test(NAME library-split-at COMMAND grd_contract_test split-at)
     add_test(NAME library-stop COMMAND grd_contract_test stop)
     add_test(NAME library-multictx COMMAND grd_contract_test multictx)
+    add_test(NAME library-run-split-row COMMAND grd_contract_test run-split-row)
+    add_test(NAME library-run-split-col-gap COMMAND grd_contract_test run-split-col-gap)
+    add_test(NAME library-run-errors COMMAND grd_contract_test run-errors)
 endif()

@@ -94,7 +94,9 @@ Preserve exactly:
 - `src/libgrd.c` for tree, layout, gap, drag, and reusable behavior;
 - `src/libgrd.h` for public structures and API;
 - `src/test.c` for all tests, including deep-tree, stress, platform, and
-    integration cases.
+    integration cases;
+- `lib/parson/` for the vendored Parson JSON library (used by the runner and
+    the CLI's runner payload handling; do not modify).
 
 Do not create additional source, header, layout, geometry, drag, tree, or test
 files. Extend only the existing four files.

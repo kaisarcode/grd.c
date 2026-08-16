@@ -15,6 +15,8 @@
 
 #define KC_GRD_ESTOP (-3)
 
+#define KC_GRD_WEIGHTS_CAP 256
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -219,6 +221,19 @@ int kc_grd_box_close(kc_grd_box_t *b);
  * @return Child pointer or NULL on invalid input.
  */
 kc_grd_box_t *kc_grd_split_at(const kc_grd_split_t *s, int i);
+
+/**
+ * Executes a CLI subcommand from a JSON payload and returns the result as a
+ * JSON string. This is the canonical implementation of the CLI's
+ * functionality; the CLI builds a payload from its arguments, calls this
+ * function, and formats the returned boxes to its usual output. The returned
+ * string and the error message are malloc'd and must be freed by the caller.
+ * @param payload_json JSON payload with "cmd" and "args".
+ * @param out_err Receives a malloc'd error message on failure, or NULL on
+ *     success.
+ * @return malloc'd JSON result string, or NULL on failure.
+ */
+char *kc_grd_run(const char *payload_json, char **out_err);
 
 #ifdef __cplusplus
 }

@@ -70,6 +70,30 @@ kc_grd_box_free(root);
 
 ---
 
+## Runner
+
+`kc_grd_run()` is the canonical implementation of the CLI's `split`
+functionality as an in-process function. The CLI itself builds a payload from
+argv, calls the runner, and formats the result to the same stdout rows, so the
+CLI interface is unchanged.
+
+```c
+char *payload = "{\"cmd\":\"split\",\"args\":{\"w\":1920,\"h\":1080,"
+                "\"k\":\"row\",\"W\":[1,2,1],\"g\":0,\"m\":1}}";
+char *err = NULL;
+char *result = kc_grd_run(payload, &err);
+/* result: {"result":{"boxes":[{"index":0,"x":0,"y":0,"w":480,"h":1080},...]},"handle":0} */
+free(result);
+free(err);
+```
+
+On failure `kc_grd_run()` returns `NULL` and sets `err` to a malloc'd message
+(e.g. `missing or invalid "w"`). The caller frees the result and the error
+message. `handle` is ignored (grd is stateless). The runner uses the vendored
+Parson JSON library (`lib/parson/`).
+
+---
+
 ## Lifecycle
 
 - `kc_grd_box_new()` - allocates a new box. The caller owns the box until it is added to a split.
@@ -81,7 +105,7 @@ kc_grd_box_free(root);
 
 ## Build
 
-Compiled artifacts are generated under `bin/{arch}/{platform}/` for the host architecture running the build.
+Compiled artifacts are generated under `bin/{arch}/{platform}/` for the host architecture running the build. The vendored JSON library under `lib/parson/` is compiled in automatically; it is not an external dependency.
 
 ```bash
 make clean && make
@@ -186,3 +210,7 @@ If you'd like to reach out, you can send an email to kaisar@kaisarcode.com. Plea
 [![GPLv3](https://www.gnu.org/graphics/gplv3-127x51.png)](https://www.gnu.org/licenses/gpl-3.0.html)
 
 This project is distributed under the **GNU General Public License version 3 (GPLv3)**.
+
+Vendored third-party source retains its own license:
+
+- Parson, Copyright (c) 2012–2022 Krzysztof Gabis, is distributed under the MIT License in `lib/parson/LICENSE`.
