@@ -72,10 +72,9 @@ kc_grd_box_free(root);
 
 ## Runner
 
-`kc_grd_run()` is the canonical implementation of the CLI's `split`
-functionality as an in-process function. The CLI itself builds a payload from
-argv, calls the runner, and formats the result to the same stdout rows, so the
-CLI interface is unchanged.
+`kc_grd_run()` is the canonical implementation for the split
+functionality as an in-process function. The CLI application itself is
+a mirror implementation of it.
 
 ```c
 char *payload = "{\"cmd\":\"split\",\"args\":{\"w\":1920,\"h\":1080,"
