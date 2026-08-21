@@ -669,24 +669,6 @@ uint64_t kc_grd_version(void) {
 }
 
 /**
- * Sets a malloc'd error message for the runner.
- * @param out_err Error output pointer.
- * @param fmt printf-style format string.
- * @return void
- */
-static void kc_grd_set_err(char **out_err, const char *fmt, ...) {
-    va_list ap;
-    char buf[256];
-
-    if (out_err == NULL) return;
-    *out_err = NULL;
-    va_start(ap, fmt);
-    vsnprintf(buf, sizeof buf, fmt, ap);
-    va_end(ap);
-    *out_err = strdup(buf);
-}
-
-/**
  * Reads an integer runner argument that must be a whole number.
  * @param o Args object.
  * @param key Key name.
@@ -795,41 +777,43 @@ char *kc_grd_run(const char *payload_json, char **out_err) {
 
     if (out_err != NULL) *out_err = NULL;
     if (payload_json == NULL) {
-        kc_grd_set_err(out_err, "missing payload");
+        if (out_err) *out_err = strdup("missing payload");
         return NULL;
     }
 
     root = json_parse_string(payload_json);
     if (root == NULL || json_value_get_type(root) != JSONObject) {
         json_value_free(root);
-        kc_grd_set_err(out_err, "missing or invalid \"cmd\"");
+        if (out_err) *out_err = strdup("missing or invalid \"cmd\"");
         return NULL;
     }
     o = json_value_get_object(root);
 
     cmd = json_object_get_string(o, "cmd");
     if (cmd == NULL) {
-        kc_grd_set_err(out_err, "missing or invalid \"cmd\"");
+        if (out_err) *out_err = strdup("missing or invalid \"cmd\"");
         goto fail;
     }
     if (strcmp(cmd, "split") != 0) {
-        kc_grd_set_err(out_err, "unknown command \"%s\"", cmd);
+        if (out_err) {
+        if (asprintf(out_err, "unknown command \"%s\"", cmd) == -1) *out_err = NULL;
+    }
         goto fail;
     }
 
     v = json_object_get_value(o, "args");
     if (v == NULL || json_value_get_type(v) != JSONObject) {
-        kc_grd_set_err(out_err, "missing or invalid \"args\"");
+        if (out_err) *out_err = strdup("missing or invalid \"args\"");
         goto fail;
     }
     o = json_value_get_object(v);
 
     if (!kc_grd_arg_int(o, "w", &w, 0)) {
-        kc_grd_set_err(out_err, "missing or invalid \"w\"");
+        if (out_err) *out_err = strdup("missing or invalid \"w\"");
         goto fail;
     }
     if (!kc_grd_arg_int(o, "h", &h, 0)) {
-        kc_grd_set_err(out_err, "missing or invalid \"h\"");
+        if (out_err) *out_err = strdup("missing or invalid \"h\"");
         goto fail;
     }
 
@@ -837,26 +821,26 @@ char *kc_grd_run(const char *payload_json, char **out_err) {
     if (v != NULL) {
         const char *kind;
         if (json_value_get_type(v) != JSONString) {
-            kc_grd_set_err(out_err, "missing or invalid \"k\"");
+            if (out_err) *out_err = strdup("missing or invalid \"k\"");
             goto fail;
         }
         kind = json_value_get_string(v);
         if (strcmp(kind, "col") == 0) {
             k = KC_GRD_COL;
         } else if (strcmp(kind, "row") != 0) {
-            kc_grd_set_err(out_err, "missing or invalid \"k\"");
+            if (out_err) *out_err = strdup("missing or invalid \"k\"");
             goto fail;
         }
     }
 
     v = json_object_get_value(o, "W");
     if (v == NULL || json_value_get_type(v) != JSONArray) {
-        kc_grd_set_err(out_err, "missing or invalid \"W\"");
+        if (out_err) *out_err = strdup("missing or invalid \"W\"");
         goto fail;
     }
     weight_count = (int)json_array_get_count(json_value_get_array(v));
     if (weight_count < 2 || weight_count > KC_GRD_WEIGHTS_CAP) {
-        kc_grd_set_err(out_err, "missing or invalid \"W\"");
+        if (out_err) *out_err = strdup("missing or invalid \"W\"");
         goto fail;
     }
     for (i = 0; i < weight_count; i++) {
@@ -864,12 +848,12 @@ char *kc_grd_run(const char *payload_json, char **out_err) {
             (size_t)i);
         double wgt;
         if (wv == NULL || json_value_get_type(wv) != JSONNumber) {
-            kc_grd_set_err(out_err, "missing or invalid \"W\"");
+            if (out_err) *out_err = strdup("missing or invalid \"W\"");
             goto fail;
         }
         wgt = json_value_get_number(wv);
         if (wgt <= 0) {
-            kc_grd_set_err(out_err, "missing or invalid \"W\"");
+            if (out_err) *out_err = strdup("missing or invalid \"W\"");
             goto fail;
         }
         weights[i] = (float)wgt;
@@ -877,23 +861,23 @@ char *kc_grd_run(const char *payload_json, char **out_err) {
 
     v = json_object_get_value(o, "g");
     if (v != NULL && !kc_grd_arg_int(o, "g", &gap, 1)) {
-        kc_grd_set_err(out_err, "missing or invalid \"g\"");
+        if (out_err) *out_err = strdup("missing or invalid \"g\"");
         goto fail;
     }
     v = json_object_get_value(o, "m");
     if (v != NULL && !kc_grd_arg_int(o, "m", &min_px, 1)) {
-        kc_grd_set_err(out_err, "missing or invalid \"m\"");
+        if (out_err) *out_err = strdup("missing or invalid \"m\"");
         goto fail;
     }
 
     if (kc_grd_split_compute((int)w, (int)h, k, weights, weight_count,
             (int)gap, (int)min_px, &box) != 0) {
-        kc_grd_set_err(out_err, "allocation failure");
+        if (out_err) *out_err = strdup("allocation failure");
         goto fail;
     }
     result = kc_grd_run_serialize(box->split);
     if (result == NULL) {
-        kc_grd_set_err(out_err, "allocation failure");
+        if (out_err) *out_err = strdup("allocation failure");
     }
 fail:
     kc_grd_box_free(box);
