@@ -58,7 +58,7 @@ static void kc_grd_cli_version(void) {
  * @return 1 always.
  */
 static int kc_grd_fail_usage(const char *name, const char *message) {
-    fprintf(stderr, "Error: %s\n\n", message);
+    fprintf(stderr, "grd: %s\n\n", message);
     kc_grd_help(name);
     return 1;
 }
