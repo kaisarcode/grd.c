@@ -278,15 +278,14 @@ static int kc_grd_cmd_split(
     payload = kc_grd_payload_build(width, height, kind, weights,
         weight_count, gap, min_px);
     if (payload == NULL) {
-        fprintf(stderr, "Error: allocation failed.\n");
+        fprintf(stderr, "grd: allocation failed\n");
         return 1;
     }
 
     result = kc_grd_run(payload, &err);
     free(payload);
     if (result == NULL) {
-        fprintf(stderr, "Error: %s\n",
-            err != NULL ? err : "unknown error");
+        fprintf(stderr, "grd: %s\n", err ? err : "unknown error");
         free(err);
         return 1;
     }
@@ -294,7 +293,7 @@ static int kc_grd_cmd_split(
     rc = kc_grd_print_boxes(result);
     free(result);
     if (rc != 0) {
-        fprintf(stderr, "Error: unexpected runner result.\n");
+        fprintf(stderr, "grd: unexpected runner result\n");
         return 1;
     }
     return 0;
