@@ -794,6 +794,19 @@ char *kc_grd_run(const char *payload_json, char **out_err) {
         if (out_err) *out_err = strdup("missing or invalid \"cmd\"");
         goto fail;
     }
+    if (strcmp(cmd, "version") == 0) {
+        JSON_Value *rv = json_value_init_object();
+        JSON_Value *rr = json_value_init_object();
+        JSON_Object *ro = json_value_get_object(rv);
+        JSON_Object *ao = json_value_get_object(rr);
+        json_object_set_number(ao, "version", (double)kc_grd_version());
+        json_object_set_value(ro, "result", rr);
+        json_object_set_number(ro, "handle", 0);
+        result = json_serialize_to_string(rv);
+        json_value_free(rv);
+        json_value_free(root);
+        return result;
+    }
     if (strcmp(cmd, "split") != 0) {
         if (out_err) {
         if (asprintf(out_err, "unknown command \"%s\"", cmd) == -1) *out_err = NULL;
