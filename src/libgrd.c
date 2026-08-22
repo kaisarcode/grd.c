@@ -697,18 +697,30 @@ static int kc_grd_arg_int(const JSON_Object *o, const char *key, double *out,
  * @param s Split to serialize.
  * @return malloc'd JSON string, or NULL on allocation failure.
  */
-static char *kc_grd_run_serialize(const kc_grd_split_t *s) {
-    JSON_Value *root = NULL;
-    JSON_Value *result = NULL;
-    JSON_Value *boxes = NULL;
-    char *out = NULL;
-    int i;
+static char *kc_grd_run_wrap(JSON_Value *result_json, int handle) {
+    JSON_Value *root;
+    char *out;
 
     root = json_value_init_object();
+    if (root == NULL) {
+        json_value_free(result_json);
+        return NULL;
+    }
+    json_object_set_value(json_value_get_object(root), "result", result_json);
+    json_object_set_number(json_value_get_object(root), "handle", (double)handle);
+    out = json_serialize_to_string(root);
+    json_value_free(root);
+    return out;
+}
+
+static char *kc_grd_run_serialize(const kc_grd_split_t *s) {
+    JSON_Value *result = NULL;
+    JSON_Value *boxes = NULL;
+    int i;
+
     result = json_value_init_object();
     boxes = json_value_init_array();
-    if (root == NULL || result == NULL || boxes == NULL) {
-        json_value_free(root);
+    if (result == NULL || boxes == NULL) {
         json_value_free(result);
         json_value_free(boxes);
         return NULL;
@@ -720,7 +732,6 @@ static char *kc_grd_run_serialize(const kc_grd_split_t *s) {
         JSON_Object *bo;
 
         if (box == NULL) {
-            json_value_free(root);
             json_value_free(result);
             json_value_free(boxes);
             return NULL;
@@ -734,7 +745,6 @@ static char *kc_grd_run_serialize(const kc_grd_split_t *s) {
         if (json_array_append_value(json_value_get_array(boxes), box) !=
             JSONSuccess) {
             json_value_free(box);
-            json_value_free(root);
             json_value_free(result);
             json_value_free(boxes);
             return NULL;
@@ -742,12 +752,7 @@ static char *kc_grd_run_serialize(const kc_grd_split_t *s) {
     }
 
     json_object_set_value(json_value_get_object(result), "boxes", boxes);
-    json_object_set_value(json_value_get_object(root), "result", result);
-    json_object_set_number(json_value_get_object(root), "handle", 0);
-
-    out = json_serialize_to_string(root);
-    json_value_free(root);
-    return out;
+    return kc_grd_run_wrap(result, 0);
 }
 
 /**
@@ -795,15 +800,9 @@ char *kc_grd_run(const char *payload_json, char **out_err) {
         goto fail;
     }
     if (strcmp(cmd, "version") == 0) {
-        JSON_Value *rv = json_value_init_object();
-        JSON_Value *rr = json_value_init_object();
-        JSON_Object *ro = json_value_get_object(rv);
-        JSON_Object *ao = json_value_get_object(rr);
-        json_object_set_number(ao, "version", (double)kc_grd_version());
-        json_object_set_value(ro, "result", rr);
-        json_object_set_number(ro, "handle", 0);
-        result = json_serialize_to_string(rv);
-        json_value_free(rv);
+        JSON_Value *result_val = json_value_init_object();
+        json_object_set_number(json_value_get_object(result_val), "version", (double)kc_grd_version());
+        result = kc_grd_run_wrap(result_val, 0);
         json_value_free(root);
         return result;
     }
